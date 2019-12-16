@@ -1,7 +1,11 @@
 {
   "name": "egg-coca-curd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "coca CURD",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rojer95/egg-coca-curd.git"
+  },
   "eggPlugin": {
     "name": "cocaCurd",
     "dependencies": []
