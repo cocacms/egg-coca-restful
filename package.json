@@ -1,6 +1,6 @@
 {
-  "name": "egg-coca-curd",
-  "version": "1.0.1",
+  "name": "egg-coca-curder",
+  "version": "1.0.3",
   "description": "coca CURD",
   "repository": {
     "type": "git",
