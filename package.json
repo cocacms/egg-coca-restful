@@ -1,10 +1,10 @@
 {
-  "name": "egg-coca-curder",
-  "version": "1.0.3",
-  "description": "coca CURD",
+  "name": "egg-coca-restful",
+  "version": "1.0.0",
+  "description": "coca auto restful",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rojer95/egg-coca-curd.git"
+    "url": "https://github.com/rojer95/egg-coca-restful.git"
   },
   "eggPlugin": {
     "name": "cocaCurd",
