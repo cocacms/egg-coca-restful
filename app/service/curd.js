@@ -36,9 +36,13 @@ class CurdService extends Service {
     try {
       sorter = JSON.parse(sorter);
       if (sorter.field) {
-        option.order = [
-          [ sorter.field, sorter.order === 'ascend' ? 'ASC' : 'DESC' ],
-        ];
+        const order = [];
+        if (sorter.association) {
+          order.push(sorter.associations);
+        }
+        order.push(sorter.field);
+        order.push(sorter.order === 'ascend' ? 'ASC' : 'DESC' );
+        option.order = [ order ];
       }
 
       if (filters.length > 0) {
@@ -76,6 +80,7 @@ class CurdService extends Service {
             return {
               association: includeOption.association,
               attributes: includeOption.attributes,
+              required: includeOption.required || false,
             };
           } catch (error) {
             return {
