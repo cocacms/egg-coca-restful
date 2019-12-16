@@ -38,7 +38,7 @@ class CurdService extends Service {
       if (sorter.field) {
         const order = [];
         if (sorter.association) {
-          order.push(sorter.associations);
+          order.push(sorter.association);
         }
         order.push(sorter.field);
         order.push(sorter.order === 'ascend' ? 'ASC' : 'DESC' );
