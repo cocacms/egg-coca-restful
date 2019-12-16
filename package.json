@@ -1,0 +1,10 @@
+{
+  "name": "egg-coca-curd",
+  "version": "1.0.0",
+  "description": "coca CURD",
+  "eggPlugin": {
+    "name": "cocaCurd",
+    "dependencies": []
+  },
+  "dependencies": {}
+}
