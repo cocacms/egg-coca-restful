@@ -1,13 +1,13 @@
 {
   "name": "egg-coca-restful",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "coca auto restful",
   "repository": {
     "type": "git",
     "url": "https://github.com/rojer95/egg-coca-restful.git"
   },
   "eggPlugin": {
-    "name": "cocaCurd",
+    "name": "cocaRestful",
     "dependencies": []
   },
   "dependencies": {}
