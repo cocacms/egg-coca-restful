@@ -13,6 +13,32 @@ class CurdService extends Service {
     this[CURRENTMODEL] = value;
   }
 
+  getWhere(it) {
+    const where = {};
+    if (it.value instanceof Array) {
+      if (it.value.length === 1) {
+        where[it.key] = it.value[0];
+      } else {
+        where[it.key] = it.value;
+      }
+    } else if (
+      [ 'string', 'number', 'boolean' ].includes(typeof it.value) &&
+      !it.method
+    ) {
+      where[it.key] = it.value;
+    } else if (
+      it.method &&
+      it.value &&
+      it.key &&
+      this.app.Sequelize.Op[it.method]
+    ) {
+      where[it.key] = {
+        [this.app.Sequelize.Op[it.method]]: it.value,
+      };
+    }
+    return where;
+  }
+
   buildSqlOption() {
     let { filters = [], include = [] } = this.ctx.queries;
     let {
@@ -35,63 +61,89 @@ class CurdService extends Service {
 
     try {
       sorter = JSON.parse(sorter);
-      if (sorter.field) {
-        const order = [];
-        if (sorter.association) {
-          order.push(sorter.association);
-        }
-        order.push(sorter.field);
-        order.push(sorter.order === 'ascend' ? 'ASC' : 'DESC' );
-        option.order = [ order ];
-      }
-
-      if (filters.length > 0) {
-        option.where = {};
-        for (let it of filters) {
-          it = JSON.parse(it);
-          if (it.value instanceof Array) {
-            if (it.value.length === 1) {
-              option.where[it.key] = it.value[0];
-            } else {
-              option.where[it.key] = it.value;
-            }
-          } else if (
-            [ 'string', 'number', 'boolean' ].includes(typeof it.value) &&
-            !it.method
-          ) {
-            option.where[it.key] = it.value;
-          } else if (
-            it.method &&
-            it.value &&
-            it.key &&
-            this.app.Sequelize.Op[it.method]
-          ) {
-            option.where[it.key] = {
-              [this.app.Sequelize.Op[it.method]]: it.value,
-            };
-          }
-        }
-      }
-
-      if (include && Array.isArray(include)) {
-        include = include.map(i => {
-          try {
-            const includeOption = JSON.parse(i);
-            return {
-              association: includeOption.association,
-              attributes: includeOption.attributes,
-              required: includeOption.required || false,
-            };
-          } catch (error) {
-            return {
-              association: i,
-            };
-          }
-        });
-        option.include = include;
-      }
     } catch (e) {
-      // console.log(e);
+      sorter = {};
+    }
+
+    if (sorter.field) {
+      const order = [];
+      if (sorter.association) {
+        order.push(sorter.association);
+      }
+      order.push(sorter.field);
+      order.push(sorter.order === 'ascend' ? 'ASC' : 'DESC');
+      option.order = [ order ];
+    }
+
+    const includeWhere = [];
+    if (filters.length > 0) {
+      option.where = {};
+      for (let it of filters) {
+        try {
+          it = JSON.parse(it);
+        } catch (e) {
+          continue;
+        }
+
+        if (it.key.indexOf('->') !== -1) {
+          includeWhere.push(it);
+          continue;
+        }
+
+        const where = this.getWhere(it);
+        option.where = {
+          ...where,
+          ...option.where,
+        };
+      }
+    }
+
+    if (include && Array.isArray(include)) {
+      include = include.map(i => {
+        try {
+          const includeOption = JSON.parse(i);
+          return {
+            association: includeOption.association,
+            attributes: includeOption.attributes,
+            required: includeOption.required || false,
+          };
+        } catch (error) {
+          return {
+            association: i,
+          };
+        }
+      });
+
+      if (includeWhere.length > 0) {
+        include = include.map(i => {
+          const targets = includeWhere.filter(it => {
+            const keys = it.key.split('->', 2);
+            if (keys[0] === i.association) return true;
+            return false;
+          });
+
+          if (targets.length > 0) {
+            let where = {};
+            for (const target of targets) {
+              const keys = target.key.split('->', 2);
+              where = {
+                ...where,
+                ...this.getWhere({
+                  ...target,
+                  key: keys[1],
+                }),
+              };
+            }
+
+            return {
+              ...i,
+              where,
+            };
+          }
+          return i;
+        });
+      }
+      option.include = include;
     }
 
     return option;
