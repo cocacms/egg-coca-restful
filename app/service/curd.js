@@ -102,11 +102,16 @@ class CurdService extends Service {
       include = include.map(i => {
         try {
           const includeOption = JSON.parse(i);
-          return {
+          const _ = {
             association: includeOption.association,
             attributes: includeOption.attributes,
-            required: includeOption.required || false,
           };
+
+          if (typeof includeOption.required === 'boolean') {
+            _.required = includeOption.required;
+          }
+
+          return _;
         } catch (error) {
           return {
             association: i,
