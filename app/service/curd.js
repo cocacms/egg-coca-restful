@@ -15,26 +15,22 @@ class CurdService extends Service {
 
   getWhere(it) {
     const where = {};
-    if (it.value instanceof Array) {
-      if (it.value.length === 1) {
+    if (it.method
+      && it.value &&
+      it.key &&
+      this.app.Sequelize.Op[it.method]) {
+      where[it.key] = {
+        [this.app.Sequelize.Op[it.method]]: it.value,
+      };
+    } else if (
+      (['string', 'number', 'boolean'].includes(typeof it.value) || Array.isArray(it.value)) &&
+      !it.method
+    ) {
+      if (Array.isArray(it.value) && it.value.length === 1) {
         where[it.key] = it.value[0];
       } else {
         where[it.key] = it.value;
       }
-    } else if (
-      [ 'string', 'number', 'boolean' ].includes(typeof it.value) &&
-      !it.method
-    ) {
-      where[it.key] = it.value;
-    } else if (
-      it.method &&
-      it.value &&
-      it.key &&
-      this.app.Sequelize.Op[it.method]
-    ) {
-      where[it.key] = {
-        [this.app.Sequelize.Op[it.method]]: it.value,
-      };
     }
     return where;
   }
@@ -72,7 +68,7 @@ class CurdService extends Service {
       }
       order.push(sorter.field);
       order.push(sorter.order === 'ascend' ? 'ASC' : 'DESC');
-      option.order = [ order ];
+      option.order = [order];
     }
 
     const includeWhere = [];
