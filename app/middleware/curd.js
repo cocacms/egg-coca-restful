@@ -10,26 +10,32 @@ const REST_MAP = [
   'destroy',
 ];
 
-module.exports = (model, method = false) => {
-  class CurdCallable {
-    constructor(_model) {
-      this.model = _model;
-    }
-
-    patchRestApi() {
-      REST_MAP.forEach(method => {
-        this[method] = async ctx => {
-          if (ctx.service.curd[method]) {
-            ctx.service.curd.model = this.model;
-            await ctx.service.curd[method]();
-          }
-        };
-      });
+class CurdCallable {
+  constructor(_model, _methods) {
+    this.model = _model;
+    if (!Array.isArray(_methods)) {
+      this.methods = [ _methods ];
+    } else {
+      this.methods = _methods;
     }
   }
 
-  const curd = new CurdCallable(model);
+  patchRestApi() {
+    const rests = this.methods.length === 0 ? REST_MAP : this.methods;
+
+    rests.forEach(method => {
+      this[method] = async ctx => {
+        if (ctx.service.curd[method]) {
+          ctx.service.curd.model = this.model;
+          await ctx.service.curd[method]();
+        }
+      };
+    });
+  }
+}
+
+module.exports = (model, methods = []) => {
+  const curd = new CurdCallable(model, methods);
   curd.patchRestApi();
-  if (method === false) return curd;
-  if (curd[method]) return curd[method];
+  return curd;
 };

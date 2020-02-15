@@ -1,15 +1,15 @@
-'use strict';
-const CURRENTMODEL = Symbol('Context#current_model');
+"use strict";
+const CONTEXTWHERE = Symbol("Context#context_where");
 
 module.exports = {
-  get current_model() {
-    if (!this[CURRENTMODEL]) {
-      this.throw('模型不存在');
-    }
-    return this[CURRENTMODEL];
+  /**
+   * where 上下文
+   */
+  get where() {
+    return this[CONTEXTWHERE] || {};
   },
 
-  set current_model(value) {
-    this[CURRENTMODEL] = value;
-  },
+  set where(value) {
+    this[CONTEXTWHERE] = value;
+  }
 };

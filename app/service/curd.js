@@ -3,6 +3,7 @@
 const Service = require('egg').Service;
 
 const CURRENTMODEL = Symbol('Application#current_model');
+const CURRENTMODELINITED = Symbol('Application#current_model_inited');
 
 class CurdService extends Service {
   get model() {
@@ -13,41 +14,70 @@ class CurdService extends Service {
     this[CURRENTMODEL] = value;
   }
 
-  getWhere(it) {
-    const where = {};
-    if (it.method
-      && it.value &&
-      it.key &&
-      this.app.Sequelize.Op[it.method]) {
-      where[it.key] = {
-        [this.app.Sequelize.Op[it.method]]: it.value,
-      };
-    } else if (
-      (['string', 'number', 'boolean'].includes(typeof it.value) || Array.isArray(it.value)) &&
-      !it.method
-    ) {
-      if (Array.isArray(it.value) && it.value.length === 1) {
-        where[it.key] = it.value[0];
-      } else {
-        where[it.key] = it.value;
-      }
-    }
-    return where;
+  attributes_check(attributes) {
+    if (!Array.isArray(attributes)) return [];
+    return attributes.filter(i => typeof i === 'string');
   }
 
-  buildSqlOption() {
-    let { filters = [], include = [] } = this.ctx.queries;
+  where_check(where, include = false) {
+    if (
+      [ 'string', 'number', 'boolean' ].includes(typeof where) ||
+      where === null
+    ) {
+      return where;
+    }
+
+    if (!where) return undefined;
+
+    const Op = this.app.Sequelize.Op;
+    const rt = {};
+
+    for (const key in where) {
+      if (typeof key !== 'string') {
+        continue;
+      }
+
+      let t_key;
+      if (key.indexOf('$') === 0 && Op[key.replace('$', '')]) {
+        t_key = Op[key.replace('$', '')];
+      } else if (this.is_attribute(key) || include) {
+        t_key = key;
+      }
+
+      if (t_key) {
+        const value = where[key];
+        let t_value;
+
+        if (Array.isArray(value)) {
+          t_value = value.map(i => this.where_check(i));
+        } else {
+          t_value = this.where_check(value);
+        }
+
+        if (t_value !== undefined) rt[t_key] = t_value;
+      } else {
+        return undefined;
+      }
+    }
+    return rt;
+  }
+
+  build_sql_option() {
+    let { include = [], order = [], attributes = [] } = this.ctx.queries;
     let {
       page = 1,
       pageSize = 10,
-      sorter = '{}',
-      pager = true,
+      where = '{}',
+      pager = 'true',
     } = this.ctx.query;
 
     const option = {
       pager: pager !== 'false',
     };
 
+    /**
+     * 分页处理
+     */
     if (pager !== 'false') {
       page = Number(page);
       pageSize = Number(pageSize);
@@ -55,107 +85,94 @@ class CurdService extends Service {
       option.limit = pageSize;
     }
 
+    /**
+     * json格式化各种参数
+     */
     try {
-      sorter = JSON.parse(sorter);
-    } catch (e) {
-      sorter = {};
+      where = JSON.parse(where);
+    } catch (error) {
+      where = {};
     }
 
-    if (sorter.field) {
-      const order = [];
-      if (sorter.association) {
-        order.push(sorter.association);
-      }
-      order.push(sorter.field);
-      order.push(sorter.order === 'ascend' ? 'ASC' : 'DESC');
-      option.order = [order];
+    try {
+      include = include.map(i => (i.indexOf('{') === 0 ? JSON.parse(i) : i));
+    } catch (error) {
+      include = [];
     }
 
-    const includeWhere = [];
-    if (filters.length > 0) {
-      option.where = {};
-      for (let it of filters) {
-        try {
-          it = JSON.parse(it);
-        } catch (e) {
-          continue;
+    try {
+      order = order.map(i => JSON.parse(i));
+    } catch (error) {
+      order = [];
+    }
+
+    if (order.length === 0 && this.is_attribute('id')) {
+      order = [[ 'id', 'desc' ]]; // 默认按ID倒序数据
+    }
+
+    /**
+     * 检查参数合法性
+     */
+    attributes = this.attributes_check(attributes);
+    if (attributes.length > 0) option.attributes = attributes;
+
+    order = order.filter(
+      i =>
+        Array.isArray(i) &&
+        (i.length === 2 || i.length === 3) &&
+        i.filter(ii => typeof ii !== 'string').length === 0 &&
+        [ 'desc', 'asc' ].includes(i[i.length - 1].toLowerCase())
+    );
+    if (order.length > 0) option.order = order;
+
+    include = include
+      .filter(i => {
+        if ((typeof i === 'string' && i) || i.association) {
+          return true;
         }
-
-        if (it.key.indexOf('->') !== -1) {
-          includeWhere.push(it);
-          continue;
-        }
-
-        const where = this.getWhere(it);
-        option.where = {
-          ...where,
-          ...option.where,
-        };
-      }
-    }
-
-    if (include && Array.isArray(include)) {
-      include = include.map(i => {
-        try {
-          const includeOption = JSON.parse(i);
-          const _ = {
-            association: includeOption.association,
-            attributes: includeOption.attributes,
-          };
-
-          if (typeof includeOption.required === 'boolean') {
-            _.required = includeOption.required;
-          }
-
-          return _;
-        } catch (error) {
-          return {
+        return false;
+      })
+      .map(i => {
+        if (typeof i === 'string') {
+          i = {
             association: i,
           };
         }
+
+        const rt = {};
+        rt.association = i.association;
+
+        if (i.where) {
+          rt.where = this.where_check(i.where, true);
+          if (!rt.where || Object.keys(rt.where).length === 0) delete rt.where;
+        }
+
+        if (i.attributes) {
+          rt.attributes = this.attributes_check(i.attributes);
+          if (rt.attributes.length === 0) delete rt.attributes;
+        }
+
+        if (typeof i.required === 'boolean') rt.required = true;
+        return rt;
       });
+    if (include.length > 0) option.include = include;
+    where = this.where_check(where);
 
-      if (includeWhere.length > 0) {
-        include = include.map(i => {
-          const targets = includeWhere.filter(it => {
-            const keys = it.key.split('->', 2);
-            if (keys[0] === i.association) return true;
-            return false;
-          });
+    option.where = {
+      ...(where || {}),
+      ...this.ctx.where,
+    };
 
-          if (targets.length > 0) {
-            let where = {};
-            for (const target of targets) {
-              const keys = target.key.split('->', 2);
-              where = {
-                ...where,
-                ...this.getWhere({
-                  ...target,
-                  key: keys[1],
-                }),
-              };
-            }
-
-            return {
-              ...i,
-              where,
-            };
-          }
-          return i;
-        });
-      }
-      option.include = include;
-    }
-
+    if (Object.keys(option.where).length === 0) delete option.where;
+    if (option.include) option.distinct = true;
     return option;
   }
 
   async index() {
-    const option = this.buildSqlOption();
+    const option = this.build_sql_option();
     if (option.pager) {
       this.ctx.body = await this.model.findAndCountAll({
         ...option,
-        distinct: true,
       });
     } else {
       this.ctx.body = await this.model.findAll({
@@ -165,10 +182,14 @@ class CurdService extends Service {
   }
 
   async show() {
-    const option = this.buildSqlOption();
+    const option = this.build_sql_option();
     let include = [];
     if (option.include) include = option.include;
-    this.ctx.body = await this.model.findByPk(this.ctx.params.id, {
+    this.ctx.body = await this.model.findOne({
+      where: {
+        id: this.ctx.params.id,
+        ...this.ctx.where,
+      },
       include,
     });
   }
@@ -176,9 +197,13 @@ class CurdService extends Service {
   async create() {
     const { links = [] } = this.ctx.queries;
     const data = this.ctx.request.body;
-    if (new this.model()._isAttribute('user_id')) {
-      data.user_id = this.ctx.logined.id;
+
+    for (const key in this.ctx.where) {
+      if (this.is_attribute(key)) {
+        data[key] = this.ctx.where[key];
+      }
     }
+
     this.ctx.body = await this.model.create(data);
 
     for (const link of links) {
@@ -195,21 +220,40 @@ class CurdService extends Service {
 
   async update() {
     const { links = [] } = this.ctx.queries;
-    const instance = await this.model.findByPk(this.ctx.params.id);
-    this.ctx.body = await instance.update(this.ctx.request.body);
+    const instance = await await this.model.findOne({
+      where: {
+        id: this.ctx.params.id,
+        ...this.ctx.where,
+      },
+    });
 
-    for (const link of links) {
-      if (instance[`set${link}`] && this.ctx.request.body[link.toLowerCase()]) {
-        await instance[`set${link}`]([]);
-        await instance[`set${link}`](this.ctx.request.body[link.toLowerCase()]);
+    if (instance) {
+      this.ctx.body = await instance.update(this.ctx.request.body);
+      for (const link of links) {
+        if (
+          instance[`set${link}`] &&
+          this.ctx.request.body[link.toLowerCase()]
+        ) {
+          await instance[`set${link}`]([]);
+          await instance[`set${link}`](
+            this.ctx.request.body[link.toLowerCase()]
+          );
+        }
       }
     }
   }
 
   async destroy() {
     this.ctx.body = await this.model.destroy({
-      where: { id: this.ctx.params.id },
+      where: { id: this.ctx.params.id, ...this.ctx.where },
     });
+  }
+
+  is_attribute(attribute) {
+    if (!this[CURRENTMODELINITED]) {
+      this[CURRENTMODELINITED] = new this.model();
+    }
+    return this[CURRENTMODELINITED]._isAttribute(attribute);
   }
 }
 
