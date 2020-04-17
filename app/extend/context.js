@@ -1,5 +1,5 @@
-"use strict";
-const CONTEXTWHERE = Symbol("Context#context_where");
+'use strict';
+const CONTEXTWHERE = Symbol('Context#context_where');
 
 module.exports = {
   /**
@@ -11,5 +11,5 @@ module.exports = {
 
   set where(value) {
     this[CONTEXTWHERE] = value;
-  }
+  },
 };
